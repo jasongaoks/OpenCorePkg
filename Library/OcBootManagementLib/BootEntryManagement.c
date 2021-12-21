@@ -24,6 +24,7 @@
 #include <Library/MemoryAllocationLib.h>
 #include <Library/OcBootManagementLib.h>
 #include <Library/OcDevicePathLib.h>
+#include <Library/OcDriverConnectionLib.h>
 #include <Library/OcConsoleLib.h>
 #include <Library/OcFileLib.h>
 #include <Library/OcStringLib.h>
@@ -2374,6 +2375,7 @@ OcLoadBootEntry (
     &DmgLoadContext
     );
   if (!EFI_ERROR (Status)) {
+    OcDisconnectHdaControllers (); //// TEST!
     Status = Context->StartImage (BootEntry, EntryHandle, NULL, NULL, BootEntry->LaunchInText);
     if (EFI_ERROR (Status)) {
       DEBUG ((DEBUG_WARN, "OCB: StartImage failed - %r\n", Status));

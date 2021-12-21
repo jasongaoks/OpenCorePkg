@@ -324,10 +324,25 @@ HdaControllerGetName (
   DEBUG ((DEBUG_INFO, "HDA: Controller is %s\n", HdaControllerDev->Name));
 }
 
+STATIC
+VOID
+EFIAPI
+HdaControllerExitBootServicesHandler (
+  IN EFI_EVENT  Event,
+  IN VOID       *Context
+  )
+{
+  //
+  // Fix issue whereby Windows 10/11, some hardware only, is refusing to play sound after AudioDxe.
+  //
+  HdaControllerReset (Context, FALSE);
+}
+
 EFI_STATUS
 EFIAPI
 HdaControllerReset (
-  IN HDA_CONTROLLER_DEV *HdaControllerDev
+  IN HDA_CONTROLLER_DEV *HdaControllerDev,
+  IN BOOLEAN            Restart
   ) 
 {
   DEBUG ((DEBUG_VERBOSE, "HdaControllerReset(): start\n"));
@@ -359,6 +374,23 @@ HdaControllerReset (
     //
     Status = PciIo->PollMem (PciIo, EfiPciIoWidthUint32, PCI_HDA_BAR, HDA_REG_GCTL,
       HDA_REG_GCTL_CRST, 0, MS_TO_NANOSECONDS (100), &Tmp);
+    if (EFI_ERROR (Status)) {
+      return Status;
+    }
+  }
+
+  if (!Restart) {
+    return EFI_SUCCESS;
+  }
+
+  if (HdaControllerDev->ExitBootServicesEvent == NULL) {
+    Status = gBS->CreateEvent (
+      EVT_SIGNAL_EXIT_BOOT_SERVICES,
+      TPL_CALLBACK,
+      HdaControllerExitBootServicesHandler,
+      HdaControllerDev,
+      &HdaControllerDev->ExitBootServicesEvent
+      );
     if (EFI_ERROR (Status)) {
       return Status;
     }
@@ -734,19 +766,28 @@ HdaControllerInstallProtocols (
 
 VOID
 EFIAPI
-HdaControllerCleanup(
-  IN HDA_CONTROLLER_DEV *HdaControllerDev) {
+HdaControllerCleanup (
+  IN HDA_CONTROLLER_DEV *HdaControllerDev
+  )
+{
+  EFI_STATUS            Status;
+  EFI_PCI_IO_PROTOCOL   *PciIo;
+  UINT32                HdaGCtl;
+
   DEBUG((DEBUG_VERBOSE, "HdaControllerCleanup(): start\n"));
 
   // If controller device is already free, we are done.
   if (HdaControllerDev == NULL)
     return;
 
-  // Create variables.
-  EFI_STATUS Status;
-  EFI_PCI_IO_PROTOCOL *PciIo = HdaControllerDev->PciIo;
-  UINT32 HdaGCtl;
+  PciIo = HdaControllerDev->PciIo;
 
+  // Clear ExitBootServices event.
+  if (HdaControllerDev->ExitBootServicesEvent != NULL) {
+    gBS->CloseEvent (HdaControllerDev->ExitBootServicesEvent);
+    HdaControllerDev->ExitBootServicesEvent = NULL;
+  }
+  
   // Clean HDA Controller info protocol.
   if (HdaControllerDev->HdaControllerInfoData != NULL) {
     // Uninstall protocol.
@@ -962,7 +1003,7 @@ HdaControllerDriverBindingStart (
   //
   // Reset controller.
   //
-  Status = HdaControllerReset (HdaControllerDev);
+  Status = HdaControllerReset (HdaControllerDev, TRUE);
   if (EFI_ERROR (Status)) {
     DEBUG ((DEBUG_WARN, "HDA: Controller reset - %r\n", Status));
     goto FREE_CONTROLLER;

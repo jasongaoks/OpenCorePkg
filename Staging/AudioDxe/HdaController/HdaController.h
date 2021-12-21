@@ -339,7 +339,7 @@ struct _HDA_CONTROLLER_DEV {
 
   // Events.
   EFI_EVENT ResponsePollTimer;
-  EFI_EVENT ExitBootServiceEvent;
+  EFI_EVENT ExitBootServicesEvent;
   SPIN_LOCK SpinLock;
 
   // Required quirks. 
@@ -481,7 +481,8 @@ HdaControllerStreamOutputPollTimerHandler (
 EFI_STATUS
 EFIAPI
 HdaControllerReset (
-  IN HDA_CONTROLLER_DEV *HdaControllerDev
+  IN HDA_CONTROLLER_DEV *HdaControllerDev,
+  IN BOOLEAN            Restart
   );
 
 EFI_STATUS
